@@ -28,11 +28,11 @@ This first version requires each viewer to supply project access. A shared, auto
 - `Estimate` is development **days**, confirmed by Jake. **8 hours/day is an editable initial assumption.**
 - Weekly hours are spread evenly over Monday–Friday. Forecast starts today in Europe/London; the start date can be changed for a scenario.
 - In-progress/review work is scheduled first, followed by Priority (`P0`–`P3` or High/Medium/Low), then the project's returned item order.
-- Each developer has a separate sequential queue. A task must have exactly one owner, Matt or Jake, to receive a forecast. Other or multiple owners need planning.
+- Each developer has a separate sequential queue; prerequisites are resolved before dependent tasks. A task must have exactly one owner, Matt or Jake, to receive a forecast. Other or multiple owners need planning.
 - Completed items consume no future capacity. The task completion count includes all visible, unarchived project items, including any parent issues present in the project.
 - Missing `Time spent` is displayed as unknown; forecasting conservatively assumes the full estimate remains. Time spent is not inferred from issue age or status.
 - If time spent reaches/exceeds the estimate on an unfinished task, an explicit `Remaining` estimate is required. Unknown effort blocks that owner's later queue rather than inventing a date.
-- Forecasts ignore holidays, dependencies and interruptions. They are planning estimates, not deadlines. Parent and child items should not both carry the same delivery estimate or their effort will be counted twice.
+- Forecasts include recorded dependencies and weekly capacity exceptions. Unrecorded holidays, dependencies and interruptions are not included. They are planning estimates, not deadlines. Parent and child items should not both carry the same delivery estimate or their effort will be counted twice.
 - Roadmap groups follow the existing `Required for prototype`, `Required for rollout`, and `Future Plans` labels. A group has no overall completion date while any unfinished item is unforecasted.
 
 ### Optional numeric project fields
@@ -58,3 +58,36 @@ The included workflow tests the application, then deploys only the six static ap
 4. Use the HTML dashboard link at the top of this README.
 
 The repository is public, so the deployed app is public. Private project information is only retrieved for authenticated viewers in their own browsers. Do not commit credentials or private project snapshots.
+
+
+## GitHub Pages-compatible upgrades
+
+Everything runs in the browser: no backend, database or build dependencies were added. The existing GitHub Pages workflow still deploys the application.
+
+### Live updates and freshness
+
+The connected dashboard refreshes every 5 minutes by default while the tab is visible; returning to the tab triggers a refresh if due. Settings allows 0 (off) or 1–60 minutes. Requests do not overlap, and failures preserve the last successful data with a warning. Data older than the greater of 15 minutes or twice the refresh interval is marked stale. Tokens remain only in tab memory. Closing/reloading disconnects live access.
+
+### Reports for stakeholders without a token
+
+Use **Save report** to download a JSON report with current task data, the planning scenario and forecast dates. It never contains a token. Stakeholders open the same GitHub Pages URL and choose **Open report** to view that file without GitHub credentials. Reports are read locally, not uploaded. Their original data timestamp, scenario start date and sample/live provenance are retained. The dashboard explicitly labels them as saved, not live. Reports contain project information: share only with intended viewers and do not commit private reports to this public repository.
+
+GitHub Pages alone cannot offer a shared authenticated live integration with a server-side secret. This version deliberately provides live per-viewer connections plus token-free report viewing. A shared live backend remains outside this static-only scope.
+
+### Capacity exceptions, ranges and release forecasts
+
+In Settings, add a weekly exception for Matt and Jake; it replaces their normal hours for that Monday–Sunday week. Zero hours represents leave. Capacity is spread over the five weekdays. A forecast is calculated for expected effort and again for a configurable caution allowance (25% additional remaining effort by default). These are scenarios, not confidence intervals. Ranges propagate across task queues and dependencies. Prototype, rollout and future-plan forecasts aggregate those dates and remain incomplete when any open task cannot be scheduled. The scheduling horizon is ten years.
+
+### Effort tracking and dependencies
+
+**Plan task** lets you enter an estimate in days, actual time spent in hours, remaining effort in days, progress, a delivery owner, a blocked flag and prerequisite tasks. These are clearly labelled local adjustments, persist through refresh and are included in exported reports. They are not written back to GitHub and are lost on reload unless saved in a report. Clear local adjustments to restore GitHub values.
+
+Alternatively add a GitHub Projects text field called **Depends on** (name configurable). Enter full issue URLs or same-repository `#number` references separated by spaces/commas. Missing or ambiguous references, dependency cycles and blocked tasks receive no forecast. Dependencies must finish before dependent work begins; the calculation conservatively starts dependent work on the next weekday. This field is independent of GitHub's native issue relationship UI; native relationships are not automatically imported.
+
+Weekly exceptions are session-only and included in reports. General preferences such as base hours and refresh interval remain browser-local settings. The report's scenario start date is retained when reopened; change it in Settings to reforecast from today.
+
+### Weekly review
+
+On the first live load, the dashboard sets a session baseline. **What changed?** compares completion, status, added/removed tasks, later forecast dates, lost forecasts and changed effort against that baseline. **Compare with report** loads last week's report as a baseline without replacing the current project. It always shows the actual comparison timestamp; it does not invent a week's history. **Set baseline now** begins a new comparison period. Local scenario changes also affect comparisons and are explicitly identified as such.
+
+CSV now includes expected and cautious dates, dependencies and whether a local adjustment is applied. It exports the current filtered view.
