@@ -6,7 +6,7 @@ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/London',year:'nume
 let settings={...DEFAULTS};try{const saved=JSON.parse(localStorage.getItem('offgrid-settings')||'{}');for(const key of Object.keys(DEFAULTS)){if(typeof saved[key]===typeof DEFAULTS[key])settings[key]=saved[key];}}catch{}
 settings.exceptions=[];
 let sample=false;
-let overrides={}, baseline=null, editingId=null, refreshTimer=null, lastAttempt=0, generation=0;
+let overrides={}, baseline=null, refreshTimer=null, lastAttempt=0, lastChecked=null, generation=0;
 let start=today, data=null,token='',mode='empty',filter='all',rows=[],visible=[],busy=false;
 $('today').textContent=new Date().toLocaleDateString('en-GB',{timeZone:'Europe/London',day:'numeric',month:'long',year:'numeric'});
 const date=d=>d?new Date(d+'T12:00:00Z').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit',timeZone:'Europe/London'}):'Not forecast';
@@ -29,11 +29,11 @@ function render(){
  const pct=t.progress===null?null:Math.min(100,t.progress);
  const phases=groups.filter(([,label])=>t.labels.some(value=>value.toLowerCase()===label.toLowerCase())).map(([name])=>name);
  const phaseCell=phases.length?phases.map(name=>`<span class="badge">${esc(name)}</span>`).join(' '):'<span class="muted">Not set</span>';
- return `<tr><td>${link}<small>${t.number?'#'+esc(t.number)+' · ':''}${esc(t.priority||'No priority')}${t.localOverride?' · Local adjustment':''}${t.overrun?' · <span class="badge warn">Over estimate</span>':''}${t.late?' · <span class="badge warn">Past target</span>':''}</small></td><td>${phaseCell}</td><td>${esc(t.owners.map(o=>PEOPLE[o]||o).join(', ')||'Unassigned')}</td><td><span class="badge ${t.done?'done':/progress|review/i.test(t.status)?'active':''}">${esc(t.status)}</span></td><td>${hours(t.estimate)} <span class="muted">/ ${hours(t.spent)}</span><small>${t.estimate===null?'Estimate needed':(t.estimate/settings.hoursPerDay).toLocaleString('en-GB')+' days estimated'}</small></td><td>${pct===null?'<span class="muted">Not recorded</span>':`<div class="task-progress">${pct}%<div class="track"><i style="width:${pct}%"></i></div></div>`}</td><td>${t.done?'Complete':t.forecast?date(t.forecast)+' → '+date(t.cautious):'Not forecast'}<small>${esc(t.reason|| (t.remaining!==null?'Updated remaining effort':t.spent===null&&!t.done?'Assumes full estimate remains':''))}</small></td><td><button class="plan-button" data-task="${esc(t.id)}">Plan task</button></td></tr>`;
+ return `<tr><td>${link}<small>${t.number?'#'+esc(t.number)+' · ':''}${esc(t.priority||'No priority')}${t.localOverride?' · Local adjustment':''}${t.overrun?' · <span class="badge warn">Over estimate</span>':''}${t.late?' · <span class="badge warn">Past target</span>':''}</small></td><td>${phaseCell}</td><td>${esc(t.owners.map(o=>PEOPLE[o]||o).join(', ')||'Unassigned')}</td><td><span class="badge ${t.done?'done':/progress|review/i.test(t.status)?'active':''}">${esc(t.status)}</span></td><td>${hours(t.estimate)} <span class="muted">/ ${hours(t.spent)}</span><small>${t.estimate===null?'Estimate needed':(t.estimate/settings.hoursPerDay).toLocaleString('en-GB')+' days estimated'}</small></td><td>${pct===null?'<span class="muted">Not recorded</span>':`<div class="task-progress">${pct}%<div class="track"><i style="width:${pct}%"></i></div></div>`}</td><td>${t.done?'Complete':t.forecast?date(t.forecast)+' → '+date(t.cautious):'Not forecast'}<small>${esc(t.reason|| (t.remaining!==null?'Updated remaining effort':t.spent===null&&!t.done?'Assumes full estimate remains':''))}</small></td></tr>`;
  }).join('');
  $('empty').hidden=Boolean(data&&visible.length);if(data){$('empty').innerHTML=`<span>◫</span><h3>${rows.length?'No matching tasks.':'No visible tasks in this project.'}</h3><p>${rows.length?'Try a different search or filter.':'Archived and inaccessible items are excluded.'}</p>`;}
  $('shown').textContent=data?`Showing ${visible.length} of ${rows.length} tasks${sample?' · SAMPLE DATA':''}`:'No tasks loaded';$('export').disabled=!visible.length;
- $('sourceLabel').textContent=mode==='public'?'Shared GitHub project':mode==='live'?'GitHub connected':mode==='demo'?'Sample data':mode==='snapshot'?'Saved report':'Not connected';$('syncTime').textContent=data?' · Loaded '+new Date(data.syncedAt).toLocaleString('en-GB',{timeZone:'Europe/London'}):' · WattSwap / Project 8';$('refresh').disabled=busy;$('connectButton').textContent=token?'Connection settings':'Advanced connection';
+ $('sourceLabel').textContent=mode==='public'?'Shared GitHub project':mode==='live'?'GitHub connected':mode==='demo'?'Sample data':mode==='snapshot'?'Saved report':'Not connected';$('syncTime').textContent=data?' · Loaded '+new Date(data.syncedAt).toLocaleString('en-GB',{timeZone:'Europe/London'}):' · WattSwap / Project 8';$('refresh').disabled=busy;$('refresh').textContent=busy?'Checking…':'Refresh';$('connectButton').textContent=token?'Connection settings':'Advanced connection';
  renderChanges();updateFreshness();$('reportExport').disabled=!data;$('baselineReset').disabled=!data;
 }
 function openConnect(){$('connectionError').textContent='';$('connection').showModal();}
@@ -45,16 +45,17 @@ async function sync(candidate){
  catch(error){if(requestGeneration!==generation)return;const message=error.name==='TimeoutError'?'GitHub took too long to respond. Please retry.':error.message||'Unable to connect to GitHub.';$('connectionError').textContent=message;notice(message+(data?' The previously loaded data is still shown.':''),true);}
  finally{busy=false;$('load').disabled=false;render();}
 }
-async function syncPublic(){
+async function syncPublic(manual=false){
  if(busy)return;const requestGeneration=generation;busy=true;lastAttempt=Date.now();render();
  try{const result=await loadPublicProject();if(requestGeneration!==generation)return;
+ const unchanged=mode==='public'&&data?.syncedAt===result.syncedAt;lastChecked=new Date();
  if(mode!=='public'){overrides={};baseline=null;}token='';sample=false;data=result;mode='public';
- notice('Shared project loaded automatically. GitHub publishes updates about every 30 minutes.');render();
+ notice(manual?(unchanged?'Checked just now. No newer project data is available.':'Project data refreshed.'):'Shared project loaded.');render();
  if(!baseline)baseline={capturedAt:result.syncedAt,rows:structuredClone(rows)};
  }catch(error){if(requestGeneration===generation)notice((error.message||'Unable to load the shared project.')+(data?' The previously loaded data is still shown.':''),true);}
  finally{busy=false;configureRefresh();render();}
 }
-$('connectionForm').onsubmit=e=>{e.preventDefault();sync($('token').value.trim());};$('refresh').onclick=()=>token?sync(token):syncPublic();
+$('connectionForm').onsubmit=e=>{e.preventDefault();sync($('token').value.trim());};$('refresh').onclick=()=>token?sync(token):syncPublic(true);
 $('disconnect').onclick=()=>{generation++;token='';data=null;mode='empty';overrides={};baseline=null;configureRefresh();$('token').value='';$('connection').close();notice('Disconnected. Project data has been cleared from this tab.');render();$('empty').innerHTML='<span>◫</span><h3>Disconnected from GitHub.</h3><p>Use Connect GitHub above to load your project again.</p>';};
 $('settingsButton').onclick=()=>{for(const key of Object.keys(DEFAULTS))$('settingsForm').elements[key].value=settings[key];$('start').value=start;renderExceptions();$('settings').showModal();};
 $('settingsForm').onsubmit=e=>{e.preventDefault();const form=new FormData(e.target);const exceptions=[];for(const row of $('exceptions').children){const week=monday(row.querySelector('[data-week]').value);if(exceptions.some(e=>e.week===week)){row.querySelector('[data-week]').setCustomValidity('Choose a different week; this week already has an exception.');row.querySelector('[data-week]').reportValidity();return;}exceptions.push({week,MattySolja:Number(row.querySelector('[data-matt]').value),'14ellisj':Number(row.querySelector('[data-jake]').value)});}settings.exceptions=exceptions;for(const key of Object.keys(DEFAULTS))settings[key]=typeof DEFAULTS[key]==='number'?Number(form.get(key)):form.get(key);start=$('start').value;try{localStorage.setItem('offgrid-settings',JSON.stringify(Object.fromEntries(Object.keys(DEFAULTS).map(k=>[k,settings[k]]))));notice('Planning preferences saved. Weekly exceptions and task adjustments stay in this tab; save a report to keep them.');}catch{notice('Forecasts recalculated. This browser could not save your settings.',true);}$('settings').close();configureRefresh();render();};
@@ -66,7 +67,7 @@ function updateFreshness(){
  const age=data?Math.max(0,Math.floor((Date.now()-Date.parse(data.syncedAt))/60000)):0;
  const stale=data&&age>Math.max(mode==='public'?90:15,settings.refreshMinutes*2);
  $('freshness').className='notice'+(stale?' error':'');
- $('freshness').textContent=mode==='snapshot'?`Saved ${sample?'sample ':''}report — not live. Data is ${age} minutes old. Connect GitHub for current information.`:mode==='demo'?'Sample data — local demonstration only.':data?`${stale?'STALE DATA · ':''}Last successful update ${age} minutes ago. ${busy?'Refreshing…':settings.refreshMinutes?'Auto-refresh every '+settings.refreshMinutes+' minutes while this tab is visible.':'Auto-refresh is off.'}`:'The shared project loads automatically. If setup is pending, try Refresh later.';
+ $('freshness').textContent=mode==='public'?`${stale?'STALE DATA · ':''}Project data updated ${age} minutes ago. ${busy?'Checking for updates…':lastChecked?'Last checked at '+lastChecked.toLocaleTimeString('en-GB',{timeZone:'Europe/London',hour:'2-digit',minute:'2-digit',second:'2-digit'})+' (UK time).':''} GitHub publishes new data about every 30 minutes. ${settings.refreshMinutes?'This page checks every '+settings.refreshMinutes+' minutes while visible.':'Automatic checks are off.'}`:mode==='snapshot'?`Saved ${sample?'sample ':''}report — not live. Data is ${age} minutes old. Connect GitHub for current information.`:mode==='demo'?'Sample data — local demonstration only.':data?`${stale?'STALE DATA · ':''}Last successful update ${age} minutes ago. ${busy?'Refreshing…':settings.refreshMinutes?'Auto-refresh every '+settings.refreshMinutes+' minutes while this tab is visible.':'Auto-refresh is off.'}`:'The shared project loads automatically. If setup is pending, try Refresh later.';
 }
 setInterval(updateFreshness,60000);
 document.addEventListener('visibilitychange',()=>{updateFreshness();if(!document.hidden&&(token||mode==='public'||mode==='empty')&&settings.refreshMinutes>0&&!busy&&Date.now()-lastAttempt>settings.refreshMinutes*60000)(token?sync(token):syncPublic());});
@@ -75,15 +76,6 @@ function addException(e={week:monday(start),MattySolja:settings.matt,'14ellisj':
  const row=document.createElement('div');row.className='exception-row';row.innerHTML=`<label>Week containing<input data-week type="date" required value="${esc(e.week)}"></label><label>Matt hours<input data-matt type="number" min="0" max="168" step="0.5" required value="${e.MattySolja}"></label><label>Jake hours<input data-jake type="number" min="0" max="168" step="0.5" required value="${e['14ellisj']}"></label><button type="button" aria-label="Remove week">×</button>`;row.querySelector('button').onclick=()=>row.remove();row.querySelector('[data-week]').oninput=event=>event.target.setCustomValidity('');$('exceptions').append(row);
 }
 $('addException').onclick=()=>{if($('exceptions').children.length<104)addException();};
-$('taskRows').onclick=e=>{const button=e.target.closest('[data-task]');if(!button)return;editingId=button.dataset.task;const t=rows.find(t=>t.id===editingId);const o=overrides[editingId]||{};const form=$('taskPlanForm');$('taskPlanTitle').textContent=t.title;
- for(const key of ['estimate','spent','remaining','progress']){form.elements[key].value=key in o&&o[key]!==null?o[key]/(['estimate','remaining'].includes(key)?settings.hoursPerDay:1):'';form.elements[key].placeholder=t[key]===null?'Not recorded':String(t[key]/(['estimate','remaining'].includes(key)?settings.hoursPerDay:1));}
- form.elements.owner.value=o.owners?.[0]||'';form.elements.blocked.checked=t.blocked||/blocked|on hold/i.test(t.status);
- const deps=t.dependencies||[];const options=rows.filter(x=>x.id!==t.id).map(x=>`<option value="${esc(x.id)}" ${deps.includes(x.id)||deps.includes(x.url)||deps.includes('#'+x.number)?'selected':''}>${esc(x.number?'#'+x.number+' · ':'')}${esc(x.title)}</option>`);
- for(const ref of deps)if(!rows.some(x=>x.id===ref||x.url===ref||'#'+x.number===ref))options.push(`<option value="${esc(ref)}" selected>Missing dependency: ${esc(ref)}</option>`);
- form.elements.dependencies.innerHTML=options.join('');$('taskPlan').showModal();
-};
-$('taskPlanForm').onsubmit=e=>{e.preventDefault();const f=e.target;const o={};for(const key of ['estimate','spent','remaining','progress'])if(f.elements[key].value!=='')o[key]=Number(f.elements[key].value)*(['estimate','remaining'].includes(key)?settings.hoursPerDay:1);if(f.elements.owner.value)o.owners=[f.elements.owner.value];o.blocked=f.elements.blocked.checked;o.dependencies=Array.from(f.elements.dependencies.selectedOptions,o=>o.value);overrides[editingId]=o;$('taskPlan').close();notice('Local planning adjustment applied. Save a report to retain it; GitHub has not changed.');render();};
-$('clearPlan').onclick=()=>{delete overrides[editingId];$('taskPlan').close();notice('Local adjustment cleared. GitHub values restored.');render();};
 function renderChanges(){
  if(!data){$('baselineLabel').textContent='Compare against a saved report from last week.';$('changes').textContent='Load your project to track changes.';return;}
  const planning=rows.filter(t=>!t.done&&!t.forecast);
