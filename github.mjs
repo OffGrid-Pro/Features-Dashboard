@@ -12,3 +12,20 @@ export async function loadProject(token,fetcher=fetch) {
  }while(cursor);
  return {items,title,url,syncedAt:new Date().toISOString()};
 }
+
+// Only explicitly approved dashboard fields are included in the public snapshot.
+export function publicProject(project) {
+ const allowed=new Set(['Status','Priority','Estimate','Time spent','Remaining','Progress','Depends on','Target date','Due date']);
+ return {title:project.title,url:project.url,syncedAt:project.syncedAt,items:project.items.filter(i=>!i.isArchived&&i.content).map(i=>({
+  id:i.id,content:{title:i.content.title,number:i.content.number,url:i.content.url,state:i.content.state,
+   assignees:{nodes:(i.content.assignees?.nodes||[]).map(a=>({login:a.login}))},labels:{nodes:(i.content.labels?.nodes||[]).map(l=>({name:l.name}))}},
+  fieldValues:{nodes:(i.fieldValues?.nodes||[]).filter(v=>allowed.has(v.field?.name)).map(v=>({field:{name:v.field.name},...Object.fromEntries(['number','name','date','text'].filter(k=>v[k]!==undefined).map(k=>[k,v[k]]))}))}
+ }))};
+}
+export async function loadPublicProject(fetcher=fetch) {
+ const response=await fetcher('./project-data.json',{cache:'no-store',signal:AbortSignal.timeout(30000)});
+ if(!response.ok)throw new Error('The shared project feed is not available yet. The repository owner needs to finish the GitHub Pages setup.');
+ const result=await response.json();
+ if(!Array.isArray(result.items)||!Number.isFinite(Date.parse(result.syncedAt)))throw new Error('The shared project feed is invalid. Please try again later.');
+ return result;
+}
