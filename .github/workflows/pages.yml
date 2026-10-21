@@ -2,6 +2,8 @@ name: Deploy dashboard
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: '17,47 * * * *'
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,6 +25,10 @@ jobs:
           node-version: '22'
       - run: npm test
       - run: mkdir site && cp index.html styles.css app.mjs core.mjs github.mjs site/ && touch site/.nojekyll
+      - name: Fetch public project snapshot
+        run: node sync-project.mjs site/project-data.json
+        env:
+          PROJECT_READ_TOKEN: ${{ secrets.PROJECT_READ_TOKEN }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
