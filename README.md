@@ -91,3 +91,18 @@ Weekly exceptions are session-only and included in reports. General preferences 
 On the first live load, the dashboard sets a session baseline. **What changed?** compares completion, status, added/removed tasks, later forecast dates, lost forecasts and changed effort against that baseline. **Compare with report** loads last week's report as a baseline without replacing the current project. It always shows the actual comparison timestamp; it does not invent a week's history. **Set baseline now** begins a new comparison period. Local scenario changes also affect comparisons and are explicitly identified as such.
 
 CSV now includes expected and cautious dates, dependencies and whether a local adjustment is applied. It exports the current filtered view.
+
+## Automatic public project feed
+
+Visitors load the shared project automatically; no login or personal token is needed. GitHub Actions reads Project 8 using the repository secret `PROJECT_READ_TOKEN` and publishes an allowlisted `project-data.json` alongside the site. The secret is never put in browser code, repository files, or the Pages artifact.
+
+Setup:
+1. An organisation administrator must enable Pages for this repository (currently disabled by organisation policy). Choose GitHub Actions as the Pages source.
+2. Add a fresh token under Settings → Secrets and variables → Actions, named `PROJECT_READ_TOKEN`. It needs organisation Projects read access and read access to the repositories containing project issues. Authorise organisation access where required. Revoke any token previously pasted into chat.
+3. Run the Deploy dashboard workflow from Actions. It also runs on main pushes and every 30 minutes (scheduled runs can be delayed).
+
+The public snapshot includes task titles, issue links/numbers, assignees, labels, Status, Priority, Estimate, Time spent, Remaining, Progress, Depends on, Target date and Due date. Other fields and issue bodies are excluded. Custom field mappings require adding the approved field name to `publicProject` in github.mjs.
+
+A missing/expired token or failed sync stops deployment; the previous successful site remains available. The dashboard flags shared data older than 90 minutes. Renew the secret before its token expires and check failed Actions runs. GitHub can disable scheduled workflows in inactive public repositories after 60 days; re-enable the workflow if needed. Browser Refresh checks the published snapshot, not GitHub directly. Optional advanced connections still use a token only in that browser tab.
+
+Local preview: set PROJECT_READ_TOKEN securely in your shell and run `node sync-project.mjs`, then `npm start`. Generated project data is ignored by Git. Do not commit credentials.
