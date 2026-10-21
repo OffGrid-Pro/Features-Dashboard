@@ -17,3 +17,18 @@ test('cycles, missing dependencies, and blocked tasks never receive a date',()=>
 test('completed dependencies do not delay delivery',()=>{const r=forecast([task({id:'b',dependencies:['a']}),task({id:'a',done:true})],DEFAULTS,'2026-10-19');assert.equal(r.find(t=>t.id==='b').forecast,'2026-10-23');});
 test('changes distinguish completion, slips, additions and removals',()=>{const old=[task({id:'1',forecast:'2026-10-23'}),task({id:'2',forecast:'2026-10-23'}),task({id:'3'})];const now=[task({id:'1',done:true}),task({id:'2',forecast:'2026-10-26'}),task({id:'4'})];assert.deepEqual(changesSince(old,now).map(x=>x.kind),['Completed','Slipped','Added','Removed from view']);});
 test('report validation rejects nonreports and out-of-range capacities',()=>{assert.throws(()=>validateReport({}),/valid WattSwap/);const r={format:'wattswap-report',version:1,capturedAt:'2026-10-21T12:00:00Z',start:'2026-10-21',data:{syncedAt:'2026-10-21T12:00:00Z',items:[]},rows:[],settings:{...DEFAULTS,exceptions:[]},overrides:{}};assert.equal(validateReport(r).settings.matt,24);assert.throws(()=>validateReport({...r,settings:{...r.settings,matt:-1}}));});
+
+test('public snapshot excludes credentials, unrelated fields and archived items', async()=>{
+ const {publicProject}=await import('../github.mjs');
+ const item={id:'one',content:{title:'Task',body:'private body',assignees:{nodes:[{login:'Jake',email:'private'}]}},fieldValues:{nodes:[{field:{name:'Estimate'},number:3},{field:{name:'Private notes'},text:'secret'}]}};
+ const result=publicProject({title:'WattSwap',url:'https://github.com/orgs/OffGrid-Pro/projects/8',syncedAt:new Date().toISOString(),token:'credential',items:[item,{...item,id:'archived',isArchived:true}]});
+ assert.equal(result.items.length,1);assert.equal(result.items[0].fieldValues.nodes.length,1);
+ for(const value of ['credential','private body','Private notes','email'])assert.equal(JSON.stringify(result).includes(value),false);
+});
+test('public feed uses a relative uncached URL and rejects unavailable or invalid snapshots',async()=>{
+ const {loadPublicProject}=await import('../github.mjs');
+ const snapshot={items:[],syncedAt:new Date().toISOString()};
+ assert.deepEqual(await loadPublicProject(async(url,options)=>{assert.equal(url,'./project-data.json');assert.equal(options.cache,'no-store');return {ok:true,json:async()=>snapshot};}),snapshot);
+ await assert.rejects(()=>loadPublicProject(async()=>({ok:false})),/not available/);
+ await assert.rejects(()=>loadPublicProject(async()=>({ok:true,json:async()=>({items:[]})})),/invalid/);
+});
