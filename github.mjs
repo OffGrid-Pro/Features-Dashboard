@@ -5,7 +5,7 @@ export async function loadProject(token,fetcher=fetch) {
  const response=await fetcher('https://api.github.com/graphql',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({query,variables:{cursor}}),signal:AbortSignal.timeout(30000)});
  if(!response.ok)throw new Error(response.status===401?'GitHub rejected the token. Check it and try again.':response.status===403?'GitHub access denied or rate limit reached. Check project access and try later.':`GitHub request failed (${response.status}). Try again.`);
  const result=await response.json();if(result.errors?.length)throw new Error('GitHub could not read the complete project. Check project permissions and organisation access.');
- const project=result.data?.organization?.projectV2;if(!project)throw new Error('Project 8 is unavailable. Check that your token can read OffGrid-Pro projects.');
+ const project=result.data?.organization?.projectV2;if(!project)throw new Error('Project 8 is unavailable. Check that your token can read the WattSwap project.');
  items.push(...project.items.nodes);title=project.title;url=project.url;
  cursor=project.items.pageInfo.hasNextPage?project.items.pageInfo.endCursor:null;
  if(project.items.pageInfo.hasNextPage&&!cursor)throw new Error('GitHub returned an incomplete page. Please retry.');

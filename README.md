@@ -1,4 +1,4 @@
-# OffGrid development dashboard
+# WattSwap development dashboard
 
 A stakeholder view of [WattSwap Feature list — Project 8](https://github.com/orgs/OffGrid-Pro/projects/8).
 
@@ -16,7 +16,7 @@ Open http://localhost:4173. Run `npm test` for calculation, export and GitHub pa
 
 ## Connect live data
 
-Click **Connect GitHub** and enter a GitHub token that can read OffGrid-Pro project 8 and its issue repositories. For classic tokens, GitHub documents `read:project` for queries; private repository content also needs appropriate repository access. Organisation policies/SSO may require authorisation. See [GitHub’s project API guide](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects).
+Click **Connect GitHub** and enter a GitHub token that can read WattSwap project 8 and its issue repositories. For classic tokens, GitHub documents `read:project` for queries; private repository content also needs appropriate repository access. Organisation policies/SSO may require authorisation. See [GitHub’s project API guide](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects).
 
 The dashboard sends read-only GraphQL requests directly to `https://api.github.com/graphql`. Tokens and project data stay in tab memory and are never written to local storage, source files or the hosting server. Reloading requires reconnection. Only planning preferences persist in local storage. Refresh reloads every project page; a failed request retains the previous successful data and shows an error. Archived and inaccessible items are omitted. Sample data is explicitly labelled and never loaded automatically.
 
