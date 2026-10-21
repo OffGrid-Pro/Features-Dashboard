@@ -33,20 +33,19 @@ export function forecast(tasks, settings, start) {
   return matches.length===1?matches[0]:null;
  }
  function schedule(multiplier){
-  const results=new Map(),visiting=new Set(),held=new Set(),queues={MattySolja:{day:start,used:0},'14ellisj':{day:start,used:0}};
+  const results=new Map(),visiting=new Set(),queues={MattySolja:{day:start,used:0},'14ellisj':{day:start,used:0}};
   function visit(t){
    if(results.has(t._key))return results.get(t._key);
    const row={...t,forecast:null,reason:'',overrun:t.estimate!==null&&t.spent!==null&&t.spent>t.estimate,late:false};
    if(visiting.has(t._key))return {...row,reason:'Dependency cycle'};
    visiting.add(t._key);
    const owner=t.owners.length===1&&t.owners[0] in queues?t.owners[0]:null;
-   const finish=(reason='')=>{row.reason=reason;row.late=Boolean(row.forecast&&t.target&&row.forecast>t.target);results.set(t._key,row);visiting.delete(t._key);if(reason&&owner)held.add(owner);return row;};
+   const finish=(reason='')=>{row.reason=reason;row.late=Boolean(row.forecast&&t.target&&row.forecast>t.target);results.set(t._key,row);visiting.delete(t._key);return row;};
    if(t.done)return finish();
    if(!owner)return finish(t.owners.length>1?'Choose one delivery owner':'Assign Matt or Jake');
    if(t.blocked??/blocked|on hold/i.test(t.status))return finish('Blocked — needs a decision');
    let earliest=start;
    for(const ref of t.dependencies||[]){const dep=resolve(ref,t);if(!dep)return finish('Dependency missing or ambiguous');const result=visit(dep);if(!dep.done&&!result.forecast)return finish(result.reason==='Dependency cycle'?'Dependency cycle':'Dependency needs planning');if(!dep.done)earliest=[earliest,addDays(result.forecast,1)].sort().at(-1);}
-   if(held.has(owner))return finish('Earlier task needs planning');
    let remaining=t.remaining??(t.estimate===null?null:t.spent===null?t.estimate:Math.max(0,t.estimate-t.spent));
    if(remaining===null)return finish('Estimate needed');
    if(t.remaining===null&&t.spent!==null&&t.estimate!==null&&t.spent>=t.estimate)return finish('Remaining estimate needed');

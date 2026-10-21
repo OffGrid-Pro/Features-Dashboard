@@ -2,7 +2,7 @@ import {test} from 'node:test';import assert from 'node:assert/strict';import {f
 const task=(x={})=>({title:'Task',owners:['14ellisj'],estimate:24,spent:null,remaining:null,done:false,status:'Todo',priority:'',...x});
 test('24h weekly capacity completes 3 estimated days on Friday, with independent owner queues',()=>{const rows=forecast([task(),task({owners:['MattySolja']}),task()],DEFAULTS,'2026-10-19');assert.deepEqual(rows.map(r=>r.forecast),['2026-10-23','2026-10-23','2026-10-30']);});
 test('weekends and fractional working days',()=>{assert.equal(workDate('2026-10-23',1.5),'2026-10-26');assert.equal(workDate('2026-10-24',1),'2026-10-26');});
-test('missing estimate blocks subsequent owner queue, but not other developer',()=>{const rows=forecast([task({estimate:null}),task(),task({owners:['MattySolja']})],DEFAULTS,'2026-10-19');assert.equal(rows[0].reason,'Estimate needed');assert.equal(rows[1].forecast,null);assert.equal(rows[2].forecast,'2026-10-23');});
+test('missing estimate is excluded without delaying either developer',()=>{const rows=forecast([task({estimate:null}),task(),task({owners:['MattySolja']})],DEFAULTS,'2026-10-19');assert.equal(rows[0].reason,'Estimate needed');assert.equal(rows[0].forecast,null);assert.equal(rows[1].forecast,'2026-10-23');assert.equal(rows[1].cautious,'2026-10-27');assert.equal(rows[2].forecast,'2026-10-23');});
 test('overruns need remaining effort; spent is not inferred from calendar age',()=>{let r=forecast([task({spent:25})],DEFAULTS,'2026-10-19')[0];assert.equal(r.overrun,true);assert.equal(r.forecast,null);r=forecast([task({spent:25,remaining:4})],DEFAULTS,'2026-10-19')[0];assert.equal(r.forecast,'2026-10-19');assert.equal(r.overrun,true);});
 test('zero capacity, multiple and unknown owners are never silently scheduled',()=>{for(const t of [task({owners:[]}),task({owners:['someone']}),task({owners:['14ellisj','MattySolja']})])assert.equal(forecast([t],DEFAULTS,'2026-10-19')[0].forecast,null);assert.equal(forecast([task()],{...DEFAULTS,jake:0},'2026-10-19')[0].reason,'No weekly capacity');});
 test('in-progress takes precedence and closed tasks consume no capacity',()=>{const r=forecast([task({title:'later'}),task({title:'active',status:'In progress'}),task({done:true})],DEFAULTS,'2026-10-19');assert.equal(r[0].title,'active');assert.equal(r[1].forecast,'2026-10-30');assert.equal(r[2].forecast,null);});
@@ -31,4 +31,14 @@ test('public feed uses a relative uncached URL and rejects unavailable or invali
  assert.deepEqual(await loadPublicProject(async(url,options)=>{assert.equal(url,'./project-data.json');assert.equal(options.cache,'no-store');return {ok:true,json:async()=>snapshot};}),snapshot);
  await assert.rejects(()=>loadPublicProject(async()=>({ok:false})),/not available/);
  await assert.rejects(()=>loadPublicProject(async()=>({ok:true,json:async()=>({items:[]})})),/invalid/);
+});
+
+test('unplanned prerequisites still block dependants but not unrelated work',()=>{
+ const rows=forecast([task({id:'a',estimate:null}),task({id:'b',dependencies:['a']}),task({id:'c'})],DEFAULTS,'2026-10-19');
+ assert.equal(rows[1].reason,'Dependency needs planning');assert.equal(rows[1].forecast,null);assert.equal(rows[1].cautious,null);
+ assert.equal(rows[2].forecast,'2026-10-23');assert.equal(rows[2].cautious,'2026-10-27');
+});
+test('blocked and overrun tasks without remaining effort do not consume capacity',()=>{
+ const rows=forecast([task({blocked:true}),task({spent:25}),task()],DEFAULTS,'2026-10-19');
+ assert.equal(rows[0].forecast,null);assert.equal(rows[1].forecast,null);assert.equal(rows[2].forecast,'2026-10-23');
 });
