@@ -1,5 +1,5 @@
 import {DEFAULTS,PEOPLE,normalize,forecast,csv,weeklyHours,monday,changesSince,number,validateReport} from './core.mjs';
-import {loadProject} from './github.mjs';
+import {loadProject,loadPublicProject} from './github.mjs';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/London',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -30,11 +30,11 @@ function render(){
  }).join('');
  $('empty').hidden=Boolean(data&&visible.length);if(data){$('empty').innerHTML=`<span>◫</span><h3>${rows.length?'No matching tasks.':'No visible tasks in this project.'}</h3><p>${rows.length?'Try a different search or filter.':'Archived and inaccessible items are excluded.'}</p>`;}
  $('shown').textContent=data?`Showing ${visible.length} of ${rows.length} tasks${sample?' · SAMPLE DATA':''}`:'No tasks loaded';$('export').disabled=!visible.length;
- $('sourceLabel').textContent=mode==='live'?'GitHub connected':mode==='demo'?'Sample data':mode==='snapshot'?'Saved report':'Not connected';$('syncTime').textContent=data?' · Loaded '+new Date(data.syncedAt).toLocaleString('en-GB',{timeZone:'Europe/London'}):' · WattSwap / Project 8';$('refresh').disabled=!token||busy;$('connectButton').textContent=token?'Connection settings':'Connect GitHub ↗';
+ $('sourceLabel').textContent=mode==='public'?'Shared GitHub project':mode==='live'?'GitHub connected':mode==='demo'?'Sample data':mode==='snapshot'?'Saved report':'Not connected';$('syncTime').textContent=data?' · Loaded '+new Date(data.syncedAt).toLocaleString('en-GB',{timeZone:'Europe/London'}):' · WattSwap / Project 8';$('refresh').disabled=busy;$('connectButton').textContent=token?'Connection settings':'Advanced connection';
  renderChanges();updateFreshness();$('reportExport').disabled=!data;$('baselineReset').disabled=!data;
 }
 function openConnect(){$('connectionError').textContent='';$('connection').showModal();}
-$('connectButton').onclick=openConnect;$('emptyConnect').onclick=openConnect;
+$('connectButton').onclick=openConnect;$('emptyConnect').onclick=()=>syncPublic();
 for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>$(b.dataset.close).close();
 async function sync(candidate){
  if(busy)return;const requestGeneration=generation;busy=true;lastAttempt=Date.now();render();$('load').disabled=true;$('connectionError').textContent='';
@@ -42,22 +42,31 @@ async function sync(candidate){
  catch(error){if(requestGeneration!==generation)return;const message=error.name==='TimeoutError'?'GitHub took too long to respond. Please retry.':error.message||'Unable to connect to GitHub.';$('connectionError').textContent=message;notice(message+(data?' The previously loaded data is still shown.':''),true);}
  finally{busy=false;$('load').disabled=false;render();}
 }
-$('connectionForm').onsubmit=e=>{e.preventDefault();sync($('token').value.trim());};$('refresh').onclick=()=>sync(token);
+async function syncPublic(){
+ if(busy)return;const requestGeneration=generation;busy=true;lastAttempt=Date.now();render();
+ try{const result=await loadPublicProject();if(requestGeneration!==generation)return;
+ if(mode!=='public'){overrides={};baseline=null;}token='';sample=false;data=result;mode='public';
+ notice('Shared project loaded automatically. GitHub publishes updates about every 30 minutes.');render();
+ if(!baseline)baseline={capturedAt:result.syncedAt,rows:structuredClone(rows)};
+ }catch(error){if(requestGeneration===generation)notice((error.message||'Unable to load the shared project.')+(data?' The previously loaded data is still shown.':''),true);}
+ finally{busy=false;configureRefresh();render();}
+}
+$('connectionForm').onsubmit=e=>{e.preventDefault();sync($('token').value.trim());};$('refresh').onclick=()=>token?sync(token):syncPublic();
 $('disconnect').onclick=()=>{generation++;token='';data=null;mode='empty';overrides={};baseline=null;configureRefresh();$('token').value='';$('connection').close();notice('Disconnected. Project data has been cleared from this tab.');render();$('empty').innerHTML='<span>◫</span><h3>Disconnected from GitHub.</h3><p>Use Connect GitHub above to load your project again.</p>';};
 $('settingsButton').onclick=()=>{for(const key of Object.keys(DEFAULTS))$('settingsForm').elements[key].value=settings[key];$('start').value=start;renderExceptions();$('settings').showModal();};
 $('settingsForm').onsubmit=e=>{e.preventDefault();const form=new FormData(e.target);const exceptions=[];for(const row of $('exceptions').children){const week=monday(row.querySelector('[data-week]').value);if(exceptions.some(e=>e.week===week)){row.querySelector('[data-week]').setCustomValidity('Choose a different week; this week already has an exception.');row.querySelector('[data-week]').reportValidity();return;}exceptions.push({week,MattySolja:Number(row.querySelector('[data-matt]').value),'14ellisj':Number(row.querySelector('[data-jake]').value)});}settings.exceptions=exceptions;for(const key of Object.keys(DEFAULTS))settings[key]=typeof DEFAULTS[key]==='number'?Number(form.get(key)):form.get(key);start=$('start').value;try{localStorage.setItem('offgrid-settings',JSON.stringify(Object.fromEntries(Object.keys(DEFAULTS).map(k=>[k,settings[k]]))));notice('Planning preferences saved. Weekly exceptions and task adjustments stay in this tab; save a report to keep them.');}catch{notice('Forecasts recalculated. This browser could not save your settings.',true);}$('settings').close();configureRefresh();render();};
 $('search').oninput=render;$('owner').onchange=render;for(const b of document.querySelectorAll('[data-filter]'))b.onclick=()=>{filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('selected',x===b));render();};
 $('export').onclick=()=>{const url=URL.createObjectURL(new Blob([csv(visible)],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=`wattswap-${sample?'sample-':''}development-${today}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 $('demo').onclick=()=>{generation++;mode='demo';sample=true;token='';overrides={};baseline=null;configureRefresh();const demoTasks=[['Connect screen to live backend','MattySolja','In progress',2,6,25,'Required for prototype'],['Complete on-screen setup','14ellisj','In progress',3,28,70,'Required for prototype'],['Subscription verification','MattySolja','Todo',7,null,null,'Required for rollout'],['Remote monitoring view','14ellisj','Todo',15,null,null,'Required for rollout'],['Device layout refinements','14ellisj','Done',2,12,100,'Required for prototype'],['Explore supplier integrations',null,'Todo',null,null,null,'Future Plans']];data={syncedAt:new Date().toISOString(),items:demoTasks.map(([title,owner,status,estimate,spent,progress,label],i)=>({id:'sample-'+i,content:{title,number:i+1,state:status==='Done'?'CLOSED':'OPEN',assignees:{nodes:owner?[{login:owner}]:[]},labels:{nodes:[{name:label}]}},fieldValues:{nodes:[{field:{name:'Status'},name:status},{field:{name:'Estimate'},number:estimate},{field:{name:'Time spent'},number:spent},{field:{name:'Progress'},number:progress}]}}))};notice('SAMPLE DATA — illustrative tasks only. Connect GitHub to view the actual project.');render();baseline={capturedAt:new Date().toISOString(),rows:structuredClone(rows)};renderChanges();};
-function configureRefresh(){clearInterval(refreshTimer);refreshTimer=null;if(token&&settings.refreshMinutes>0)refreshTimer=setInterval(()=>{if(!document.hidden&&!busy)sync(token);},Math.max(1,settings.refreshMinutes)*60000);}
+function configureRefresh(){clearInterval(refreshTimer);refreshTimer=null;if((token||mode==='public'||mode==='empty')&&settings.refreshMinutes>0)refreshTimer=setInterval(()=>{if(!document.hidden&&!busy)(token?sync(token):syncPublic());},Math.max(1,settings.refreshMinutes)*60000);}
 function updateFreshness(){
  const age=data?Math.max(0,Math.floor((Date.now()-Date.parse(data.syncedAt))/60000)):0;
- const stale=data&&age>Math.max(15,settings.refreshMinutes*2);
+ const stale=data&&age>Math.max(mode==='public'?90:15,settings.refreshMinutes*2);
  $('freshness').className='notice'+(stale?' error':'');
- $('freshness').textContent=mode==='snapshot'?`Saved ${sample?'sample ':''}report — not live. Data is ${age} minutes old. Connect GitHub for current information.`:mode==='demo'?'Sample data — local demonstration only.':data?`${stale?'STALE DATA · ':''}Last successful update ${age} minutes ago. ${busy?'Refreshing…':settings.refreshMinutes?'Auto-refresh every '+settings.refreshMinutes+' minutes while this tab is visible.':'Auto-refresh is off.'}`:'Connect GitHub for live updates, or open a saved report without a token.';
+ $('freshness').textContent=mode==='snapshot'?`Saved ${sample?'sample ':''}report — not live. Data is ${age} minutes old. Connect GitHub for current information.`:mode==='demo'?'Sample data — local demonstration only.':data?`${stale?'STALE DATA · ':''}Last successful update ${age} minutes ago. ${busy?'Refreshing…':settings.refreshMinutes?'Auto-refresh every '+settings.refreshMinutes+' minutes while this tab is visible.':'Auto-refresh is off.'}`:'The shared project loads automatically. If setup is pending, try Refresh later.';
 }
 setInterval(updateFreshness,60000);
-document.addEventListener('visibilitychange',()=>{updateFreshness();if(!document.hidden&&token&&settings.refreshMinutes>0&&!busy&&Date.now()-lastAttempt>settings.refreshMinutes*60000)sync(token);});
+document.addEventListener('visibilitychange',()=>{updateFreshness();if(!document.hidden&&(token||mode==='public'||mode==='empty')&&settings.refreshMinutes>0&&!busy&&Date.now()-lastAttempt>settings.refreshMinutes*60000)(token?sync(token):syncPublic());});
 function renderExceptions(){ $('exceptions').innerHTML='';for(const e of settings.exceptions||[])addException(e); }
 function addException(e={week:monday(start),MattySolja:settings.matt,'14ellisj':settings.jake}){
  const row=document.createElement('div');row.className='exception-row';row.innerHTML=`<label>Week containing<input data-week type="date" required value="${esc(e.week)}"></label><label>Matt hours<input data-matt type="number" min="0" max="168" step="0.5" required value="${e.MattySolja}"></label><label>Jake hours<input data-jake type="number" min="0" max="168" step="0.5" required value="${e['14ellisj']}"></label><button type="button" aria-label="Remove week">×</button>`;row.querySelector('button').onclick=()=>row.remove();row.querySelector('[data-week]').oninput=event=>event.target.setCustomValidity('');$('exceptions').append(row);
@@ -88,3 +97,4 @@ async function readReport(file){if(!file||file.size>10*1024*1024)throw new Error
 $('reportFile').onchange=async e=>{try{const report=await readReport(e.target.files[0]);generation++;token='';$('token').value='';mode='snapshot';sample=report.sample;data=report.data;settings=report.settings;start=report.start;overrides=report.overrides;baseline={capturedAt:report.capturedAt,rows:report.rows};configureRefresh();render();notice('Saved '+(sample?'SAMPLE ':'')+'report opened locally. No information was uploaded. Forecast starts '+date(start)+'.');}catch{notice('Could not open that report. Choose an unmodified WattSwap JSON report smaller than 10 MB.',true);}finally{e.target.value='';}};
 $('baselineFile').onchange=async e=>{try{const report=await readReport(e.target.files[0]);if(report.sample!==sample)throw new Error('Cannot compare sample and real reports.');baseline={capturedAt:report.capturedAt,rows:report.rows};renderChanges();notice('Comparison baseline loaded. Your current project and planning settings are unchanged.');}catch{notice('Could not use that comparison report. Choose a valid report with the same sample/live data type.',true);}finally{e.target.value='';}};
 render();
+void syncPublic();
