@@ -33,7 +33,7 @@ function render(){
  }).join('');
  $('empty').hidden=Boolean(data&&visible.length);if(data){$('empty').innerHTML=`<span>◫</span><h3>${rows.length?'No matching tasks.':'No visible tasks in this project.'}</h3><p>${rows.length?'Try a different search or filter.':'Archived and inaccessible items are excluded.'}</p>`;}
  $('shown').textContent=data?`Showing ${visible.length} of ${rows.length} tasks${sample?' · SAMPLE DATA':''}`:'No tasks loaded';$('export').disabled=!visible.length;
- $('sourceLabel').textContent=mode==='public'?'Shared GitHub project':mode==='live'?'GitHub connected':mode==='demo'?'Sample data':mode==='snapshot'?'Saved report':'Not connected';$('syncTime').textContent=data?' · Loaded '+new Date(data.syncedAt).toLocaleString('en-GB',{timeZone:'Europe/London'}):' · WattSwap / Project 8';$('refresh').disabled=busy;$('refresh').textContent=busy?'Checking…':'Refresh';$('connectButton').textContent=token?'Connection settings':'Advanced connection';
+ $('sourceLabel').textContent=mode==='public'?'Shared GitHub project':mode==='live'?'GitHub connected':mode==='demo'?'Sample data':mode==='snapshot'?'Saved report':'Not connected';$('syncTime').textContent=data?' · Loaded '+new Date(data.syncedAt).toLocaleString('en-GB',{timeZone:'Europe/London'}):' · WattSwap / Project 9';$('refresh').disabled=busy;$('refresh').textContent=busy?'Checking…':'Refresh';$('connectButton').textContent=token?'Connection settings':'Advanced connection';
  renderChanges();updateFreshness();$('reportExport').disabled=!data;$('baselineReset').disabled=!data;
 }
 function openConnect(){$('connectionError').textContent='';$('connection').showModal();}

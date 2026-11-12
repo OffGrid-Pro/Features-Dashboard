@@ -21,7 +21,7 @@ test('report validation rejects nonreports and out-of-range capacities',()=>{ass
 test('public snapshot excludes credentials, unrelated fields and archived items', async()=>{
  const {publicProject}=await import('../github.mjs');
  const item={id:'one',content:{title:'Task',body:'private body',assignees:{nodes:[{login:'Jake',email:'private'}]}},fieldValues:{nodes:[{field:{name:'Estimate'},number:3},{field:{name:'Private notes'},text:'secret'}]}};
- const result=publicProject({title:'WattSwap',url:'https://github.com/orgs/OffGrid-Pro/projects/8',syncedAt:new Date().toISOString(),token:'credential',items:[item,{...item,id:'archived',isArchived:true}]});
+ const result=publicProject({title:'WattSwap',url:'https://github.com/orgs/OffGrid-Pro/projects/9',syncedAt:new Date().toISOString(),token:'credential',items:[item,{...item,id:'archived',isArchived:true}]});
  assert.equal(result.items.length,1);assert.equal(result.items[0].fieldValues.nodes.length,1);
  for(const value of ['credential','private body','Private notes','email'])assert.equal(JSON.stringify(result).includes(value),false);
 });

@@ -4,7 +4,7 @@
 
 View development tasks, progress, team capacity, forecast dates and overdue work. Export CSVs or save reports for review.
 
-- **Project:** [WattSwap Feature list](https://github.com/orgs/OffGrid-Pro/projects/8)
+- **Project:** [WattSwap Feature list](https://github.com/orgs/OffGrid-Pro/projects/9/views/1)
 - **Capacity:** Matt and Jake — 24 hours per week each.
 - **Estimates:** Development days, initially 8 hours per day.
 - **Hosting:** GitHub Pages, with project updates scheduled every 30 minutes. GitHub may delay these by several hours; Refresh only checks published data.
